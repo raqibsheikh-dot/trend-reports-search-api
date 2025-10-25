@@ -1,0 +1,37 @@
+# Railway Deployment Commands - Copy & Paste
+
+# Step 1: Login
+railway login
+
+# Step 2: Initialize Project
+railway init
+
+# Step 3: Deploy
+railway up
+
+# Step 4: Set Environment Variables
+railway variables set API_KEY=s1RVpbfkU6NhaCOvw4v_PX7vmoFb9O3YOOBIKXbd-lk
+railway variables set CHROMA_DB_PATH=/app/chroma_data
+
+# Step 5: Create Volume
+railway volume create chroma-data --mount /app/chroma_data
+
+# Step 6: Process PDFs on Railway
+railway shell
+python process_pdfs.py
+exit
+
+# Step 7: Get Production URL
+railway domain
+
+# Step 8: Test Production
+# First, add PROD_URL to .env file:
+# PROD_URL=https://your-railway-url.up.railway.app
+
+python test_api.py prod
+
+# Other Useful Commands:
+railway logs          # View logs
+railway status        # Check deployment status
+railway open          # Open project dashboard
+railway restart       # Restart service

@@ -1,0 +1,162 @@
+openapi: 3.0.0
+info:
+  title: Trend Reports API
+  version: 1.0.0
+  description: |
+    Search through advertising trend reports to find relevant insights and data.
+    This API serves a Custom GPT that helps teams understand and apply research from trend reports.
+
+servers:
+  - url: https://your-api-domain.com
+    description: Production server (update with your actual domain)
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /search:
+    post:
+      operationId: searchTrendReports
+      summary: Search through advertising trend reports
+      description: |
+        Searches through processed trend reports and returns the most relevant text chunks
+        with source citations. Use this to find specific information, trends, or insights.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: The search query or topic to find in trend reports
+                  example: "What are the top AI trends in advertising for 2025?"
+                top_k:
+                  type: integer
+                  description: Number of results to return (1-20)
+                  default: 5
+                  minimum: 1
+                  maximum: 20
+                  example: 5
+            examples:
+              ai_trends:
+                summary: Search for AI trends
+                value:
+                  query: "AI and machine learning trends in advertising"
+                  top_k: 5
+              social_media:
+                summary: Search for social media insights
+                value:
+                  query: "TikTok and short-form video strategies"
+                  top_k: 3
+      responses:
+        '200':
+          description: Successful search with relevant results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    content:
+                      type: string
+                      description: The relevant text chunk from the report
+                      example: "AI-powered personalization is becoming the standard in digital advertising..."
+                    source:
+                      type: string
+                      description: Name of the PDF report file
+                      example: "2025_Advertising_Trends_Report.pdf"
+                    page:
+                      type: integer
+                      description: Approximate page number in the source document
+                      example: 12
+                    relevance_score:
+                      type: number
+                      format: float
+                      description: How relevant this chunk is to the query (0.0 to 1.0)
+                      example: 0.847
+              examples:
+                search_results:
+                  summary: Example search results
+                  value:
+                    - content: "AI-powered personalization has emerged as the dominant trend..."
+                      source: "2025_Advertising_Trends_Report.pdf"
+                      page: 12
+                      relevance_score: 0.847
+                    - content: "Machine learning algorithms are now being used to optimize ad targeting..."
+                      source: "Digital_Marketing_Forecast_2025.pdf"
+                      page: 8
+                      relevance_score: 0.792
+        '400':
+          description: Bad request - invalid query or parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Query cannot be empty"
+        '401':
+          description: Unauthorized - invalid or missing API key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Invalid API key"
+        '500':
+          description: Server error during search
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: "Search failed: database connection error"
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Check API health status
+      description: Returns the health status of the API and document count
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  documents:
+                    type: integer
+                    description: Number of documents in the database
+                    example: 1523
+                  model:
+                    type: string
+                    description: Embedding model being used
+                    example: "all-MiniLM-L6-v2"
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: |
+        API key authentication. Include your API key in the Authorization header:
+        `Authorization: Bearer your_api_key_here`

@@ -1,0 +1,28 @@
+# Exclude large files from Railway upload
+chroma_data/
+*.db
+*.sqlite
+
+# PDFs (will be on server already)
+../2025 Trend Reports/
+*.pdf
+
+# Virtual environment (Railway will create its own)
+venv/
+env/
+
+# Logs and temp files
+*.log
+processing.log
+*.tmp
+
+# Development files
+.env
+.git/
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -1,0 +1,65 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "description": "Provides up-to-date, version-specific documentation and code examples for libraries directly in your prompts"
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "C:\\Users\\raqib\\OneDrive\\Desktop\\AI Experiments\\Trend Site"
+      ],
+      "description": "Semantic code analysis, symbol-level editing, and multi-language support - transforms Claude into a full coding agent with IDE-like features"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\raqib\\OneDrive\\Desktop\\AI Experiments\\Trend Site"
+      ],
+      "description": "Enhanced filesystem operations for reading and navigating project files"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": ""
+      },
+      "description": "GitHub integration for repository operations, issues, and PRs (requires GitHub token)"
+    },
+    "chromadb-inspector": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\raqib\\OneDrive\\Desktop\\AI Experiments\\Trend Site\\backend\\chromadb_mcp_server.py"
+      ],
+      "env": {
+        "CHROMA_DB_PATH": "./chroma_data"
+      },
+      "description": "ChromaDB inspection and debugging - query collections, verify chunks, analyze embeddings"
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/trendsdb"],
+      "description": "PostgreSQL database operations for relational data management"
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "description": "Knowledge graph memory for caching frequently accessed data and embeddings"
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "description": "Dynamic and reflective problem-solving through structured sequential thinking for complex tasks"
+    }
+  }
+}
