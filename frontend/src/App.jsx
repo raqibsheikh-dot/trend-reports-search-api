@@ -95,6 +95,11 @@ function App() {
         top_k: topK
       }
 
+      // Add category filter if selected
+      if (selectedCategory) {
+        body.category = selectedCategory
+      }
+
       // Determine endpoint and body based on search mode
       if (searchMode === 'synthesis') {
         endpoint = '/search/synthesized'
@@ -184,6 +189,37 @@ function App() {
             </button>
           )}
         </div>
+
+        {/* Category Filter */}
+        {ENABLE_CATEGORIES && categories.length > 0 && (
+          <div className="category-filter">
+            <label htmlFor="category">Filter by Category:</label>
+            <select
+              id="category"
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="category-select"
+              disabled={loading}
+            >
+              <option value="">All Categories</option>
+              {categories.map((cat, index) => (
+                <option key={index} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+            {selectedCategory && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('')}
+                className="clear-category"
+                disabled={loading}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSearch} className="search-form">
           {/* Main Query Input */}
@@ -564,6 +600,109 @@ function App() {
             <p className="welcome-intro">
               AI-powered creative strategy insights across 6,109 indexed documents from 51 trend reports
             </p>
+
+            {/* Example Queries Section */}
+            <div className="example-queries">
+              <h3>Quick Start Examples</h3>
+              <p className="example-queries-intro">Click any example below to try it out:</p>
+
+              <div className="example-category">
+                <h4>Campaign Development</h4>
+                <div className="example-buttons">
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("AI trends in luxury automotive advertising")}
+                  >
+                    AI trends in luxury automotive advertising
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Social commerce strategies for Gen Z")}
+                  >
+                    Social commerce strategies for Gen Z
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Sustainable fashion campaign strategies")}
+                  >
+                    Sustainable fashion campaign strategies
+                  </button>
+                </div>
+              </div>
+
+              <div className="example-category">
+                <h4>Pitch Preparation</h4>
+                <div className="example-buttons">
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Statistics on Gen Z shopping behaviors")}
+                  >
+                    Statistics on Gen Z shopping behaviors
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Digital transformation in financial services 2025")}
+                  >
+                    Digital transformation in financial services 2025
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("E-commerce trends for retail clients")}
+                  >
+                    E-commerce trends for retail clients
+                  </button>
+                </div>
+              </div>
+
+              <div className="example-category">
+                <h4>Creative Concepting</h4>
+                <div className="example-buttons">
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Brands using AR and immersive experiences")}
+                  >
+                    Brands using AR and immersive experiences
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Personalization strategies at scale")}
+                  >
+                    Personalization strategies at scale
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Influencer marketing evolution 2025")}
+                  >
+                    Influencer marketing evolution 2025
+                  </button>
+                </div>
+              </div>
+
+              <div className="example-category">
+                <h4>Innovation Scouting</h4>
+                <div className="example-buttons">
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Emerging technologies for creative agencies")}
+                  >
+                    Emerging technologies for creative agencies
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("Web3 and blockchain in marketing")}
+                  >
+                    Web3 and blockchain in marketing
+                  </button>
+                  <button
+                    className="example-button"
+                    onClick={() => setQuery("AI tools for content creation")}
+                  >
+                    AI tools for content creation
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="features-grid">
               <div className="feature-card">
                 <h3>🔍 Simple Search</h3>

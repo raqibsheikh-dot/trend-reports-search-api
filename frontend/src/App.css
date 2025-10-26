@@ -306,6 +306,74 @@
 }
 
 /* ============================================
+   Category Filter
+   ============================================ */
+.category-filter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex-wrap: wrap;
+}
+
+.category-filter label {
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+}
+
+.category-select {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.category-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.category-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #f5f5f5;
+}
+
+.clear-category {
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c33;
+  background: #fee;
+  border: 2px solid #c33;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.clear-category:hover:not(:disabled) {
+  background: #c33;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.clear-category:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================
    Advanced Search Options
    ============================================ */
 .advanced-options {
@@ -911,6 +979,77 @@
 }
 
 /* ============================================
+   Example Queries Section
+   ============================================ */
+.example-queries {
+  margin: 2rem 0;
+  padding: 2rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border: 2px solid #e0e0e0;
+}
+
+.example-queries h3 {
+  color: #667eea;
+  margin-bottom: 0.5rem;
+  text-align: center;
+  font-size: 1.5rem;
+}
+
+.example-queries-intro {
+  text-align: center;
+  color: #666;
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+
+.example-category {
+  margin-bottom: 2rem;
+}
+
+.example-category:last-child {
+  margin-bottom: 0;
+}
+
+.example-category h4 {
+  color: #764ba2;
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  padding-left: 0.5rem;
+  border-left: 4px solid #667eea;
+}
+
+.example-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.example-button {
+  padding: 0.75rem 1.25rem;
+  font-size: 0.95rem;
+  color: #667eea;
+  background: white;
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+  text-align: left;
+}
+
+.example-button:hover {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.example-button:active {
+  transform: translateY(0);
+}
+
+/* ============================================
    Responsive Design
    ============================================ */
 @media (max-width: 768px) {
@@ -928,6 +1067,15 @@
 
   .mode-button {
     width: 100%;
+  }
+
+  .category-filter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .category-select {
+    min-width: 100%;
   }
 
   .search-input-group {
@@ -966,6 +1114,14 @@
 
   .categories-preview ul {
     grid-template-columns: 1fr;
+  }
+
+  .example-buttons {
+    flex-direction: column;
+  }
+
+  .example-button {
+    width: 100%;
   }
 
   .meta-info,
