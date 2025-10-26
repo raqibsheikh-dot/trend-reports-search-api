@@ -4,11 +4,11 @@ services:
   # ============================================
   - type: web
     name: trend-reports-api
-    runtime: python
+    runtime: docker
     plan: starter  # Upgrade to standard for production traffic
     region: oregon  # Choose closest to your users
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
 
     # Environment variables
     envVars:

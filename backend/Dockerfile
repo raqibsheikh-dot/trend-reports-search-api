@@ -40,11 +40,11 @@ COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY --chown=appuser:appuser main.py .
-COPY --chown=appuser:appuser process_pdfs.py .
+COPY --chown=appuser:appuser *.py .
 
-# Create directories for data persistence
-RUN mkdir -p /app/chroma_data && chown -R appuser:appuser /app
+# Create app directory and set permissions
+# Note: Render will mount disk at /var/data automatically
+RUN mkdir -p /app && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
@@ -62,6 +62,6 @@ ENV OMP_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV NUMEXPR_NUM_THREADS=1
 
-# Run the application with limited workers
-# Use PORT env var from Railway, default to 8000
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+# Run the application
+# Use PORT env var from Render, default to 8000
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2
