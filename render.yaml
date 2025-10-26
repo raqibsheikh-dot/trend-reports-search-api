@@ -7,8 +7,6 @@ services:
     runtime: docker
     plan: starter  # Upgrade to standard for production traffic
     region: oregon  # Choose closest to your users
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
 
     # Environment variables
     envVars:
