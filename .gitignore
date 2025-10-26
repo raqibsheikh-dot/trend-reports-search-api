@@ -27,11 +27,6 @@ env/
 ENV/
 .venv
 
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
 # ChromaDB Data
 backend/chroma_data/
 chroma_data/
@@ -88,5 +83,89 @@ processing_checkpoint.json
 Thumbs.db
 .DS_Store
 
+# ========================================
+# Security & Secrets (CRITICAL - DO NOT COMMIT)
+# ========================================
+# Environment files with actual secrets
+.env
+.env.local
+.env.production
+.env.*.local
+backend/.env
+frontend/.env
+
+# AWS credentials
+.aws/
+credentials
+config
+
+# API keys and tokens
+*.key
+*.pem
+*.cert
+api_keys.txt
+secrets.json
+secrets.yaml
+
+# ========================================
+# Backups
+# ========================================
+# ChromaDB backups
+backups/
+backup_*/
+*.backup
+*.tar.gz
+chroma_backup_*/
+
+# Database dumps
+*.sql
+*.dump
+
+# ========================================
+# Cache & Temporary Data
+# ========================================
+# Redis dump files
+dump.rdb
+
+# Application cache
+.cache/
+*.cache
+cache/
+
+# Temporary processing files
+temp/
+tmp/
+*.tmp
+
+# ========================================
+# Monitoring & Analytics
+# ========================================
+# Sentry configuration
+.sentry/
+
+# Metrics data
+metrics/
+prometheus_data/
+
+# ========================================
+# Testing & Development
+# ========================================
+# Test output
+test_results/
+.test_cache/
+
+# Coverage reports
+.coverage.*
+coverage/
+
+# Development databases
+*.db
+*.sqlite
+
+# ========================================
 # Claude Code
+# ========================================
+# Claude Code configuration (but keep claude.md for project instructions)
 .claude/
+!.claude/claude.md
+!.claude/CLAUDE.md

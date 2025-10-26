@@ -32,9 +32,9 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-github"],
       "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": ""
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       },
-      "description": "GitHub integration for repository operations, issues, and PRs (requires GitHub token)"
+      "description": "GitHub integration for repository operations, issues, and PRs. Set GITHUB_PERSONAL_ACCESS_TOKEN environment variable."
     },
     "chromadb-inspector": {
       "command": "python",
@@ -60,6 +60,14 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
       "description": "Dynamic and reflective problem-solving through structured sequential thinking for complex tasks"
+    },
+    "render": {
+      "transport": "http",
+      "url": "https://mcp.render.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${RENDER_API_TOKEN}"
+      },
+      "description": "Render.com platform integration - create/manage web services, static sites, databases, monitor logs, deployments, and metrics. Set RENDER_API_TOKEN environment variable."
     }
   }
 }

@@ -24,3 +24,41 @@ pydantic-settings>=2.7.0
 
 # Note: Switched from sentence-transformers to fastembed for lower memory usage
 # fastembed uses ONNX runtime instead of PyTorch (~80% less memory)
+
+# ========================================
+# Caching (Optional - for production)
+# ========================================
+redis>=5.0.0  # Optional: Install only if using Redis caching
+
+# ========================================
+# LLM Integration (for advanced features)
+# ========================================
+anthropic>=0.34.0  # Claude API
+openai>=1.40.0  # GPT API
+
+# ========================================
+# Monitoring & Observability (Optional)
+# ========================================
+prometheus-client>=0.20.0  # Prometheus metrics client
+prometheus-fastapi-instrumentator>=7.0.0  # Prometheus FastAPI integration
+psutil>=6.0.0  # System metrics (CPU, memory, disk)
+sentry-sdk[fastapi]>=2.0.0  # Error tracking (optional)
+
+# ========================================
+# Backups (Optional - for S3 backups)
+# ========================================
+boto3>=1.34.0  # AWS S3 for backups (optional)
+
+# ========================================
+# Advanced Search Features
+# ========================================
+sentence-transformers>=3.0.0  # For cross-encoder reranking (optional)
+
+# ========================================
+# Testing & Development
+# ========================================
+pytest>=8.0.0  # Testing framework
+pytest-asyncio>=0.23.0  # Async test support
+pytest-cov>=5.0.0  # Coverage reporting
+pytest-mock>=3.14.0  # Mocking utilities
+httpx>=0.27.0  # Required for FastAPI TestClient

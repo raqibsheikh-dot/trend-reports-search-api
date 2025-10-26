@@ -1,45 +1,217 @@
 services:
+  # ============================================
+  # Backend API - FastAPI with ChromaDB
+  # ============================================
   - type: web
     name: trend-reports-api
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --log-level info
+    runtime: python
+    plan: starter  # Upgrade to standard for production traffic
+    region: oregon  # Choose closest to your users
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2
 
     # Environment variables
     envVars:
+      # === Core Configuration ===
       - key: API_KEY
-        generateValue: true  # Render will auto-generate secure key
+        generateValue: true  # Render auto-generates secure key
 
       - key: ENVIRONMENT
         value: production
 
       - key: CHROMA_DB_PATH
-        value: /app/chroma_data
+        value: /var/data/chroma_data
 
       - key: REPORTS_FOLDER
-        value: /app/2025 Trend Reports
+        value: /var/data/2025 Trend Reports
 
+      # === Processing Configuration ===
       - key: CHUNK_SIZE
         value: "800"
 
       - key: OVERLAP
         value: "150"
 
+      # === Security & Rate Limiting ===
       - key: RATE_LIMIT
-        value: 20/minute  # Increased for production
+        value: 50/minute
 
       - key: ALLOWED_ORIGINS
-        value: https://chat.openai.com,https://chatgpt.com
+        value: https://your-frontend.onrender.com,https://chat.openai.com,https://chatgpt.com
 
-    # Persistent disk for ChromaDB
+      # === LLM Integration ===
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Add this as secret in Render dashboard
+
+      - key: OPENAI_API_KEY
+        sync: false  # Add this as secret in Render dashboard
+
+      - key: LLM_PROVIDER
+        value: anthropic
+
+      - key: ANTHROPIC_MODEL
+        value: claude-3-5-sonnet-20241022
+
+      - key: OPENAI_MODEL
+        value: gpt-4
+
+      - key: LLM_MAX_RETRIES
+        value: "3"
+
+      - key: LLM_TIMEOUT
+        value: "120"
+
+      - key: LLM_BUDGET_LIMIT
+        value: "100.00"
+
+      # === Caching Configuration ===
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: trend-reports-cache
+          property: connectionString
+
+      - key: CACHE_TTL
+        value: "3600"
+
+      - key: ENABLE_CACHE
+        value: "true"
+
+      - key: USE_LRU_CACHE
+        value: "false"
+
+      - key: LRU_CACHE_SIZE
+        value: "256"
+
+      # === Advanced Features ===
+      - key: ENABLE_CATEGORIZATION
+        value: "true"
+
+      - key: ENABLE_SYNTHESIS
+        value: "true"
+
+      - key: ENABLE_STRUCTURED_RESPONSE
+        value: "true"
+
+      - key: ENABLE_ADVANCED_SEARCH
+        value: "true"
+
+      # === Backup Configuration ===
+      - key: ENABLE_S3_BACKUP
+        value: "false"
+
+      - key: S3_BUCKET_NAME
+        value: ""  # Configure if using S3 backups
+
+      - key: S3_ACCESS_KEY
+        sync: false
+
+      - key: S3_SECRET_KEY
+        sync: false
+
+      - key: BACKUP_RETENTION_DAYS
+        value: "7"
+
+      # === Monitoring ===
+      - key: SENTRY_DSN
+        sync: false  # Optional: Add Sentry for error tracking
+
+      - key: LOG_LEVEL
+        value: info
+
+    # Persistent disk for ChromaDB and reports
     disk:
       name: chroma-data
-      mountPath: /app/chroma_data
-      sizeGB: 10
+      mountPath: /var/data
+      sizeGB: 20  # Increased for backups
 
-    # Health check configuration
+    # Health check
     healthCheckPath: /health
 
-    # Auto-deploy on git push
+    # Auto-deploy
     autoDeploy: true
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  - type: redis
+    name: trend-reports-cache
+    plan: starter  # 25MB cache - upgrade to standard (256MB) for production
+    region: oregon  # Same region as backend
+    ipAllowList: []  # Empty = allow from Render services only
+
+    # Redis configuration
+    maxmemoryPolicy: allkeys-lru  # Evict least recently used keys
+
+  # ============================================
+  # Frontend - React Static Site
+  # ============================================
+  - type: web
+    name: trend-reports-frontend
+    runtime: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+
+    # Environment variables for build
+    envVars:
+      - key: VITE_API_URL
+        value: https://trend-reports-api.onrender.com  # Update with your actual backend URL
+
+      - key: VITE_API_KEY
+        fromService:
+          type: web
+          name: trend-reports-api
+          envVarKey: API_KEY
+
+      - key: VITE_ENABLE_ADVANCED_SEARCH
+        value: "true"
+
+      - key: VITE_ENABLE_CATEGORIES
+        value: "true"
+
+      - key: VITE_ENABLE_SYNTHESIS
+        value: "true"
+
+    # Routes configuration for SPA
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    # Auto-deploy
+    autoDeploy: true
+
+# ============================================
+# Optional: Backup Cron Job
+# ============================================
+# Uncomment to enable automated backups
+# - type: cron
+#   name: chroma-backup-job
+#   runtime: python
+#   schedule: "0 2 * * *"  # Run at 2 AM daily
+#   buildCommand: cd backend && pip install -r requirements.txt
+#   startCommand: cd backend && python backup_chromadb.py --auto
+#
+#   envVars:
+#     - key: CHROMA_DB_PATH
+#       value: /var/data/chroma_data
+#
+#     - key: BACKUP_DIR
+#       value: /var/data/backups
+#
+#     - key: ENABLE_S3_BACKUP
+#       value: "true"
+#
+#     - key: S3_BUCKET_NAME
+#       sync: false
+#
+#     - key: S3_ACCESS_KEY
+#       sync: false
+#
+#     - key: S3_SECRET_KEY
+#       sync: false
+#
+#   disk:
+#     name: chroma-data
+#     mountPath: /var/data
+#     sizeGB: 20
