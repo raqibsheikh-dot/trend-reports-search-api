@@ -165,7 +165,21 @@ coverage/
 # ========================================
 # Claude Code
 # ========================================
-# Claude Code configuration (but keep claude.md for project instructions)
+# Ignore Claude Code directory except specific files
 .claude/
+# Keep project documentation
 !.claude/claude.md
 !.claude/CLAUDE.md
+!.claude/README.md
+!.claude/MCP_SERVERS_GUIDE.md
+# Keep configuration templates
+!.claude/mcp.json
+!.claude/mcp.env.example
+!.claude/test_mcp_servers.sh
+# Keep project settings
+!.claude/settings.local.json
+# But always ignore secrets
+.claude/mcp.env
+.claude/*.key
+.claude/*.pem
+.claude/secrets*

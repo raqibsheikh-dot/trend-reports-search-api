@@ -158,10 +158,12 @@ class LLMService:
         api_key: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3,
-        cost_tracker: Optional[CostTracker] = None
+        cost_tracker: Optional[CostTracker] = None,
+        max_connections: int = 10,
+        max_keepalive_connections: int = 5
     ):
         """
-        Initialize LLM service
+        Initialize LLM service with HTTP connection pooling
 
         Args:
             provider: LLM provider to use
@@ -170,11 +172,15 @@ class LLMService:
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
             cost_tracker: Cost tracking instance
+            max_connections: Maximum HTTP connections in pool (default: 10)
+            max_keepalive_connections: Maximum keepalive connections (default: 5)
         """
         self.provider = provider
         self.timeout = timeout
         self.max_retries = max_retries
         self.cost_tracker = cost_tracker or CostTracker()
+        self.max_connections = max_connections
+        self.max_keepalive_connections = max_keepalive_connections
 
         # Set up provider-specific client
         if provider == LLMProvider.ANTHROPIC:
@@ -196,23 +202,57 @@ class LLMService:
         logger.info(f"✓ LLM service initialized: {provider.value}/{self.model}")
 
     def _setup_anthropic(self):
-        """Initialize Anthropic client"""
+        """Initialize Anthropic client with HTTP connection pooling"""
         try:
             from anthropic import AsyncAnthropic
+            import httpx
 
-            self.client = AsyncAnthropic(api_key=self.api_key, timeout=self.timeout)
-        except ImportError:
-            logger.error("anthropic package not installed. Install with: pip install anthropic")
+            # Create HTTP client with connection pooling
+            http_client = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_connections=self.max_connections,
+                    max_keepalive_connections=self.max_keepalive_connections,
+                    keepalive_expiry=30.0  # Keep connections alive for 30 seconds
+                ),
+                timeout=self.timeout
+            )
+
+            self.client = AsyncAnthropic(
+                api_key=self.api_key,
+                timeout=self.timeout,
+                http_client=http_client
+            )
+            logger.info(f"✓ Anthropic client initialized with connection pool (max: {self.max_connections})")
+        except ImportError as e:
+            logger.error(f"Required package not installed: {e}")
+            logger.error("Install with: pip install anthropic httpx")
             raise
 
     def _setup_openai(self):
-        """Initialize OpenAI client"""
+        """Initialize OpenAI client with HTTP connection pooling"""
         try:
             from openai import AsyncOpenAI
+            import httpx
 
-            self.client = AsyncOpenAI(api_key=self.api_key, timeout=self.timeout)
-        except ImportError:
-            logger.error("openai package not installed. Install with: pip install openai")
+            # Create HTTP client with connection pooling
+            http_client = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_connections=self.max_connections,
+                    max_keepalive_connections=self.max_keepalive_connections,
+                    keepalive_expiry=30.0  # Keep connections alive for 30 seconds
+                ),
+                timeout=self.timeout
+            )
+
+            self.client = AsyncOpenAI(
+                api_key=self.api_key,
+                timeout=self.timeout,
+                http_client=http_client
+            )
+            logger.info(f"✓ OpenAI client initialized with connection pool (max: {self.max_connections})")
+        except ImportError as e:
+            logger.error(f"Required package not installed: {e}")
+            logger.error("Install with: pip install openai httpx")
             raise
 
     async def generate(
@@ -434,7 +474,7 @@ Return only the queries, one per line, no numbering or explanation."""
 # Factory function
 def get_llm_service() -> Optional[LLMService]:
     """
-    Create LLM service from environment configuration
+    Create LLM service from environment configuration with HTTP connection pooling
 
     Environment variables:
         - LLM_PROVIDER: "anthropic" or "openai" (default: anthropic)
@@ -442,6 +482,8 @@ def get_llm_service() -> Optional[LLMService]:
         - ANTHROPIC_MODEL / OPENAI_MODEL: Model names
         - LLM_TIMEOUT: Request timeout (default: 30)
         - LLM_BUDGET_LIMIT: Monthly budget in USD (default: 50.0)
+        - LLM_MAX_CONNECTIONS: Max HTTP connections in pool (default: 10)
+        - LLM_MAX_KEEPALIVE: Max keepalive connections (default: 5)
 
     Returns:
         LLMService instance or None if not configured
@@ -465,6 +507,8 @@ def get_llm_service() -> Optional[LLMService]:
 
     timeout = int(os.getenv("LLM_TIMEOUT", "30"))
     budget_limit = float(os.getenv("LLM_BUDGET_LIMIT", "50.0"))
+    max_connections = int(os.getenv("LLM_MAX_CONNECTIONS", "10"))
+    max_keepalive = int(os.getenv("LLM_MAX_KEEPALIVE", "5"))
 
     cost_tracker = CostTracker(monthly_budget_usd=budget_limit)
 
@@ -472,7 +516,9 @@ def get_llm_service() -> Optional[LLMService]:
         return LLMService(
             provider=provider,
             timeout=timeout,
-            cost_tracker=cost_tracker
+            cost_tracker=cost_tracker,
+            max_connections=max_connections,
+            max_keepalive_connections=max_keepalive
         )
     except Exception as e:
         logger.error(f"Failed to initialize LLM service: {e}")

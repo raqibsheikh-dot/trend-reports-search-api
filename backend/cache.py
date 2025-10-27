@@ -46,22 +46,49 @@ class CacheBackend(ABC):
 
 
 class RedisCache(CacheBackend):
-    """Redis-based cache implementation for production"""
+    """Redis-based cache implementation for production with connection pooling"""
 
-    def __init__(self, redis_url: str = "redis://localhost:6379", ttl: int = 3600):
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379",
+        ttl: int = 3600,
+        max_connections: int = 10,
+        socket_connect_timeout: int = 5,
+        socket_keepalive: bool = True
+    ):
         """
-        Initialize Redis cache connection
+        Initialize Redis cache connection with connection pooling
 
         Args:
             redis_url: Redis connection URL
             ttl: Default time-to-live for cached items (seconds)
+            max_connections: Maximum number of connections in pool (default: 10)
+            socket_connect_timeout: Connection timeout in seconds (default: 5)
+            socket_keepalive: Enable TCP keepalive (default: True)
         """
         try:
             import redis
-            self.redis = redis.from_url(redis_url, decode_responses=True)
+
+            # Create connection pool for better concurrent performance
+            pool = redis.ConnectionPool.from_url(
+                redis_url,
+                max_connections=max_connections,
+                socket_connect_timeout=socket_connect_timeout,
+                socket_keepalive=socket_keepalive,
+                decode_responses=True
+            )
+
+            # Create Redis client with connection pool
+            self.redis = redis.Redis(connection_pool=pool)
             self.ttl = ttl
-            self.redis.ping()  # Test connection
-            logger.info(f"✓ Connected to Redis at {redis_url}")
+            self.max_connections = max_connections
+
+            # Test connection
+            self.redis.ping()
+            logger.info(
+                f"✓ Connected to Redis at {redis_url} "
+                f"(pool: {max_connections} connections)"
+            )
         except ImportError:
             logger.error("Redis package not installed. Install with: pip install redis")
             raise
@@ -114,15 +141,26 @@ class RedisCache(CacheBackend):
             return False
 
     def get_stats(self) -> dict:
-        """Get Redis statistics"""
+        """Get Redis statistics including connection pool info"""
         try:
             info = self.redis.info()
+
+            # Get connection pool stats
+            pool = self.redis.connection_pool
+            pool_stats = {
+                "max_connections": self.max_connections,
+                "connections_created": len(pool._created_connections) if hasattr(pool, '_created_connections') else "N/A",
+                "available_connections": len(pool._available_connections) if hasattr(pool, '_available_connections') else "N/A",
+                "in_use_connections": len(pool._in_use_connections) if hasattr(pool, '_in_use_connections') else "N/A",
+            }
+
             return {
                 "type": "redis",
                 "connected": True,
                 "keys": self.redis.dbsize(),
                 "memory_used": info.get("used_memory_human", "unknown"),
                 "uptime_seconds": info.get("uptime_in_seconds", 0),
+                "connection_pool": pool_stats
             }
         except Exception as e:
             logger.error(f"Redis stats error: {e}")
@@ -346,6 +384,7 @@ def create_cache(
     redis_url: str = "redis://localhost:6379",
     lru_size: int = 256,
     ttl: int = 3600,
+    max_connections: int = 10,
 ) -> Optional[QueryCache]:
     """
     Factory function to create appropriate cache instance based on configuration
@@ -356,6 +395,7 @@ def create_cache(
         redis_url: Redis connection URL
         lru_size: LRU cache size
         ttl: Default TTL for cached items
+        max_connections: Maximum Redis connections in pool (default: 10)
 
     Returns:
         QueryCache instance or None if caching is disabled
@@ -368,7 +408,11 @@ def create_cache(
         if use_lru:
             backend = LRUCache(max_size=lru_size)
         else:
-            backend = RedisCache(redis_url=redis_url, ttl=ttl)
+            backend = RedisCache(
+                redis_url=redis_url,
+                ttl=ttl,
+                max_connections=max_connections
+            )
 
         return QueryCache(backend=backend)
 
@@ -389,6 +433,7 @@ def get_cache_from_env() -> Optional[QueryCache]:
         - REDIS_URL: Redis connection URL
         - LRU_CACHE_SIZE: LRU cache size (default: 256)
         - CACHE_TTL: Cache TTL in seconds (default: 3600)
+        - REDIS_MAX_CONNECTIONS: Max connections in pool (default: 10)
 
     Returns:
         QueryCache instance or None
@@ -398,6 +443,7 @@ def get_cache_from_env() -> Optional[QueryCache]:
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     lru_size = int(os.getenv("LRU_CACHE_SIZE", "256"))
     ttl = int(os.getenv("CACHE_TTL", "3600"))
+    max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "10"))
 
     return create_cache(
         enable_cache=enable_cache,
@@ -405,6 +451,7 @@ def get_cache_from_env() -> Optional[QueryCache]:
         redis_url=redis_url,
         lru_size=lru_size,
         ttl=ttl,
+        max_connections=max_connections,
     )
 
 

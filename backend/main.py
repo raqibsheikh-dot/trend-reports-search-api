@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi import FastAPI, HTTPException, Header, Depends, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from pydantic_settings import BaseSettings
 from typing import List, Optional, Annotated
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -21,11 +22,32 @@ from datetime import datetime, timezone
 # Import caching layer
 from cache import get_cache_from_env, QueryCache
 
+# Import ChromaDB safe wrapper
+from chromadb_wrapper import (
+    SafeChromaDBWrapper,
+    create_safe_wrapper,
+    ChromaDBError,
+    ChromaDBConnectionError,
+    ChromaDBQueryError,
+    ChromaDBTimeoutError
+)
+
+# Import input validation
+from input_validation import (
+    sanitize_query,
+    validate_search_request,
+    ValidationError as InputValidationError,
+    SuspiciousInputError
+)
+
 # Import advanced features
 from categorization import Categorizer, TrendCategory
 from synthesis import TrendSynthesizer
 from response_formatter import ResponseFormatter, ResponseStyle
 from advanced_search import AdvancedSearchEngine, AdvancedSearchRequest
+
+# Import services
+from services import SearchService, create_search_service
 
 # Import resilience and monitoring
 from resilience import (
@@ -87,14 +109,15 @@ class Settings(BaseSettings):
             )
         return v
 
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False
+    )
+
     def get_allowed_origins_list(self) -> list[str]:
         """Convert comma-separated origins to list"""
         return [origin.strip() for origin in self.allowed_origins.split(",")]
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
 
 
 # Initialize settings (will raise error if invalid)
@@ -109,7 +132,9 @@ except Exception as e:
 app = FastAPI(
     title="Trend Intelligence API",
     description="AI-powered creative strategy insights across 51 trend reports",
-    version="2.0.0"
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
 # Rate limiting
@@ -124,6 +149,19 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# ============================================================================
+# API v1 Router
+# ============================================================================
+v1_router = APIRouter(
+    prefix="/v1",
+    tags=["v1"],
+    responses={
+        401: {"description": "Unauthorized - Invalid API key"},
+        429: {"description": "Too Many Requests - Rate limit exceeded"},
+        503: {"description": "Service Unavailable - Temporary issue"},
+    }
 )
 
 # Initialize monitoring on startup
@@ -241,8 +279,8 @@ def get_embedder() -> TextEmbedding:
     return get_embedder._instance
 
 
-def get_collection() -> chromadb.Collection:
-    """Dependency: Get or create ChromaDB collection (thread-safe)"""
+def get_collection() -> SafeChromaDBWrapper:
+    """Dependency: Get or create safe ChromaDB collection wrapper (thread-safe)"""
     if not hasattr(get_collection, "_instance"):
         logger.info(f"Connecting to ChromaDB at {settings.chroma_db_path}...")
 
@@ -256,9 +294,17 @@ def get_collection() -> chromadb.Collection:
             path=settings.chroma_db_path,
             settings=chroma_settings
         )
-        get_collection._instance = chroma.get_or_create_collection(name="trend_reports")
-        doc_count = get_collection._instance.count()
-        logger.info(f"✓ Connected to ChromaDB ({doc_count} documents)")
+        collection = chroma.get_or_create_collection(name="trend_reports")
+
+        # Wrap with safe error handling
+        get_collection._instance = create_safe_wrapper(
+            collection=collection,
+            timeout_seconds=10,
+            max_retries=3
+        )
+
+        doc_count = collection.count()
+        logger.info(f"✓ Connected to ChromaDB ({doc_count} documents) with safe wrapper")
     return get_collection._instance
 
 
@@ -311,7 +357,7 @@ def get_formatter(llm: Annotated[Optional['LLMService'], Depends(get_llm)]) -> R
 
 def get_advanced_search(
     embedder: Annotated[TextEmbedding, Depends(get_embedder)],
-    collection: Annotated[chromadb.Collection, Depends(get_collection)],
+    collection: Annotated[SafeChromaDBWrapper, Depends(get_collection)],
     llm: Annotated[Optional['LLMService'], Depends(get_llm)]
 ) -> AdvancedSearchEngine:
     """Dependency: Get advanced search engine instance"""
@@ -322,6 +368,28 @@ def get_advanced_search(
             llm_service=llm
         )
     return get_advanced_search._instance
+
+
+def get_search_service(
+    collection: Annotated[SafeChromaDBWrapper, Depends(get_collection)],
+    embedder: Annotated[TextEmbedding, Depends(get_embedder)],
+    cache: Annotated[Optional[QueryCache], Depends(get_cache)],
+    synthesizer: Annotated[TrendSynthesizer, Depends(get_synthesizer)],
+    formatter: Annotated[ResponseFormatter, Depends(get_formatter)],
+    advanced_engine: Annotated[AdvancedSearchEngine, Depends(get_advanced_search)]
+) -> SearchService:
+    """Dependency: Get search service instance with all dependencies"""
+    if not hasattr(get_search_service, "_instance"):
+        get_search_service._instance = create_search_service(
+            collection=collection,
+            embedder=embedder,
+            cache=cache,
+            synthesizer=synthesizer,
+            formatter=formatter,
+            advanced_engine=advanced_engine
+        )
+        logger.info("✓ SearchService initialized")
+    return get_search_service._instance
 
 
 class SearchRequest(BaseModel):
@@ -389,297 +457,29 @@ def verify_api_key(authorization: Optional[str] = Header(None)) -> str:
     return token
 
 
-@app.post("/search", response_model=List[SearchResult])
-@limiter.limit(settings.rate_limit)
-async def search_trends(
-    request: Request,
-    search_request: SearchRequest,
-    embedder: Annotated[TextEmbedding, Depends(get_embedder)],
-    collection: Annotated[chromadb.Collection, Depends(get_collection)],
-    cache: Annotated[Optional[QueryCache], Depends(get_cache)],
-    _: Annotated[str, Depends(verify_api_key)]
-):
-    """
-    Search trend reports - called by Custom GPT
+# ============================================================================
+# ROUTER INCLUDES
+# ============================================================================
+# Import routers after all dependencies are defined to avoid circular imports
+from routers.search_router import router as search_router
+from routers.admin_router import router as admin_router
+from routers.util_router import router as util_router
 
-    Returns relevant chunks from the trend reports with source citations.
-    Results are cached for improved performance.
+# Include all routers in v1_router
+v1_router.include_router(search_router)
+v1_router.include_router(admin_router)
+v1_router.include_router(util_router)
 
-    Args:
-        request: Search query and parameters
-        embedder: Injected FastEmbed model
-        collection: Injected ChromaDB collection
-        cache: Injected cache instance (optional)
-        _: API key verification (discarded after validation)
+# Note: Endpoints have been organized into domain routers:
+# - routers/search_router.py: POST /search, /search/synthesized, /search/structured, /search/advanced
+# - routers/admin_router.py: GET /cache/stats, POST /cache/clear
+# - routers/util_router.py: GET /categories, GET /llm/stats
 
-    Returns:
-        List of SearchResult objects with content, source, page, and relevance score
-    """
-    request_id = request_id_var.get()
-
-    # Check cache first
-    if cache:
-        cached_results = cache.get_search_results(
-            query=search_request.query,
-            top_k=search_request.top_k
-        )
-        if cached_results:
-            logger.info(
-                f"[{request_id}] Cache HIT: query='{search_request.query[:50]}...', "
-                f"results={len(cached_results)}"
-            )
-            # Convert cached dicts back to SearchResult objects
-            return [SearchResult(**r) for r in cached_results]
-
-        logger.debug(f"[{request_id}] Cache MISS: query='{search_request.query[:50]}...'")
-
-    # Cache miss or caching disabled - perform search
-    try:
-        # Embed the query (fastembed returns generator, get first embedding)
-        query_embedding = list(embedder.embed([search_request.query]))[0].tolist()
-
-        # Search ChromaDB
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=search_request.top_k,
-            include=["documents", "metadatas", "distances"]
-        )
-
-        # Format for GPT
-        formatted_results = []
-
-        if results["documents"] and results["documents"][0]:
-            for i, doc in enumerate(results["documents"][0]):
-                formatted_results.append(SearchResult(
-                    content=doc,
-                    source=results["metadatas"][0][i].get("filename", "Unknown"),
-                    page=results["metadatas"][0][i].get("page", 0),
-                    relevance_score=round(1 - results["distances"][0][i], 3)  # Convert distance to similarity
-                ))
-
-        # Cache the results
-        if cache and formatted_results:
-            # Convert SearchResult objects to dicts for caching
-            cache_data = [r.model_dump() for r in formatted_results]
-            cache.set_search_results(
-                query=search_request.query,
-                top_k=search_request.top_k,
-                results=cache_data
-            )
-
-        logger.info(
-            f"[{request_id}] Search completed: query='{search_request.query[:50]}...', "
-            f"results={len(formatted_results)}"
-        )
-        return formatted_results
-
-    except chromadb.errors.ChromaError as e:
-        logger.error(f"[{request_id}] ChromaDB error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Search service temporarily unavailable")
-    except ValueError as e:
-        logger.warning(f"[{request_id}] Invalid search parameters: {e}")
-        raise HTTPException(status_code=400, detail="Invalid search parameters")
-    except Exception as e:
-        logger.error(f"[{request_id}] Unexpected search error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An unexpected error occurred")
-
-
-@app.post("/search/synthesized")
-@limiter.limit(settings.rate_limit)
-async def search_with_synthesis(
-    request: Request,
-    search_request: SearchRequest,
-    embedder: Annotated[TextEmbedding, Depends(get_embedder)],
-    collection: Annotated[chromadb.Collection, Depends(get_collection)],
-    synthesizer: Annotated[TrendSynthesizer, Depends(get_synthesizer)],
-    cache: Annotated[Optional[QueryCache], Depends(get_cache)],
-    _: Annotated[str, Depends(verify_api_key)]
-):
-    """
-    Search with cross-report synthesis
-
-    Identifies meta-trends, consensus, and contradictions across sources.
-    Requires LLM integration for best results.
-
-    Returns:
-        Synthesized insights with meta-trends and analysis
-    """
-    request_id = request_id_var.get()
-
-    # Perform base search
-    base_results = await search_trends(
-        request, search_request, embedder, collection, cache, _
-    )
-
-    # Convert SearchResult objects to dicts for synthesis
-    results_dicts = [r.model_dump() for r in base_results]
-
-    # Perform synthesis
-    try:
-        synthesis_result = await synthesizer.synthesize(
-            query=search_request.query,
-            results=results_dicts,
-            min_sources_for_meta=2
-        )
-
-        logger.info(
-            f"[{request_id}] Synthesis completed: "
-            f"{len(synthesis_result.meta_trends)} meta-trends identified"
-        )
-
-        return synthesizer.format_for_display(synthesis_result)
-
-    except Exception as e:
-        logger.error(f"[{request_id}] Synthesis failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Synthesis failed. Ensure LLM service is configured."
-        )
-
-
-@app.post("/search/structured")
-@limiter.limit(settings.rate_limit)
-async def search_with_structure(
-    request: Request,
-    search_request: SearchRequest,
-    embedder: Annotated[TextEmbedding, Depends(get_embedder)],
-    collection: Annotated[chromadb.Collection, Depends(get_collection)],
-    formatter: Annotated[ResponseFormatter, Depends(get_formatter)],
-    cache: Annotated[Optional[QueryCache], Depends(get_cache)],
-    _: Annotated[str, Depends(verify_api_key)]
-):
-    """
-    Search with structured response format
-
-    Returns results formatted according to claude.md framework:
-    - Relevant trends
-    - Context
-    - Data points
-    - Applications
-    - Connections
-    - Next steps
-
-    Requires LLM integration for best results.
-
-    Returns:
-        Structured response with actionable insights
-    """
-    request_id = request_id_var.get()
-
-    # Perform base search
-    base_results = await search_trends(
-        request, search_request, embedder, collection, cache, _
-    )
-
-    # Convert to dicts
-    results_dicts = [r.model_dump() for r in base_results]
-
-    # Format response
-    try:
-        structured_response = await formatter.format_response(
-            query=search_request.query,
-            results=results_dicts
-        )
-
-        logger.info(
-            f"[{request_id}] Structured response generated: "
-            f"{len(structured_response.relevant_trends)} trends, "
-            f"{len(structured_response.applications)} applications"
-        )
-
-        return structured_response.model_dump()
-
-    except Exception as e:
-        logger.error(f"[{request_id}] Response formatting failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Response formatting failed. Ensure LLM service is configured."
-        )
-
-
-@app.post("/search/advanced")
-@limiter.limit(settings.rate_limit)
-async def advanced_search(
-    request: Request,
-    search_request: AdvancedSearchRequest,
-    advanced_engine: Annotated[AdvancedSearchEngine, Depends(get_advanced_search)],
-    _: Annotated[str, Depends(verify_api_key)]
-):
-    """
-    Advanced search with multiple query strategies
-
-    Supported query types:
-    - simple: Standard vector search
-    - multi_dimensional: Intersection of multiple concepts
-    - scenario: "What if" scenario analysis
-    - trend_stack: Combine specific trends
-
-    Args:
-        search_request: Advanced search request with query_type and parameters
-
-    Returns:
-        Results optimized for the selected query type
-    """
-    request_id = request_id_var.get()
-
-    try:
-        results = await advanced_engine.search(search_request)
-
-        logger.info(
-            f"[{request_id}] Advanced search ({search_request.query_type}): "
-            f"{len(results.get('results', []))} results"
-        )
-
-        return results
-
-    except Exception as e:
-        logger.error(f"[{request_id}] Advanced search failed: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Advanced search failed: {str(e)}"
-        )
-
-
-@app.get("/categories")
-async def list_categories():
-    """
-    List available trend categories
-
-    Returns:
-        List of category names and descriptions
-    """
-    return {
-        "categories": [
-            {
-                "id": cat.name,
-                "name": cat.value,
-                "description": f"Trends related to {cat.value.lower()}"
-            }
-            for cat in TrendCategory
-        ]
-    }
-
-
-@app.get("/llm/stats")
-async def llm_stats(
-    llm: Annotated[Optional['LLMService'], Depends(get_llm)]
-):
-    """
-    Get LLM usage statistics
-
-    Returns cost tracking and usage metrics for LLM-powered features.
-    """
-    if not llm:
-        return {
-            "enabled": False,
-            "message": "LLM service not configured"
-        }
-
-    stats = llm.get_cost_stats()
-    return {
-        "enabled": True,
-        **stats
-    }
+# ============================================================================
+# APP-LEVEL ENDPOINTS (not versioned)
+# ============================================================================
+# Note: All /v1 endpoints have been moved to routers/
+# Only health and metrics remain at app level
 
 
 @app.get("/health")
@@ -732,98 +532,94 @@ async def prometheus_metrics():
     return await metrics_endpoint()
 
 
-@app.get("/cache/stats")
-async def cache_stats(
-    cache: Annotated[Optional[QueryCache], Depends(get_cache)]
-):
-    """
-    Get cache statistics
-
-    Returns:
-        Cache performance metrics including hit/miss rates, size, etc.
-    """
-    if not cache:
-        return {
-            "enabled": False,
-            "message": "Caching is disabled"
-        }
-
-    stats = cache.get_stats()
-    return {
-        "enabled": True,
-        **stats
-    }
-
-
-@app.post("/cache/clear")
-async def clear_cache(
-    cache: Annotated[Optional[QueryCache], Depends(get_cache)],
-    _: Annotated[str, Depends(verify_api_key)]
-):
-    """
-    Clear all cached search results
-
-    Requires authentication. Useful for invalidating cache after data updates.
-
-    Returns:
-        Success status
-    """
-    if not cache:
-        return {"success": False, "message": "Caching is disabled"}
-
-    success = cache.clear_all()
-    if success:
-        logger.info("Cache cleared via API")
-        return {"success": True, "message": "Cache cleared successfully"}
-    else:
-        logger.error("Failed to clear cache")
-        raise HTTPException(status_code=500, detail="Failed to clear cache")
-
-
 @app.get("/")
 async def root():
-    """Root endpoint with API info"""
+    """Root endpoint with API info and versioning"""
     return {
         "name": "Trend Intelligence API - Creative Strategy Intelligence",
         "version": "2.0.0",
+        "api_version": "v1",
         "description": "AI-powered trend analysis across 51+ reports with 6,109+ documents",
         "endpoints": {
-            "core": {
-                "search": "POST /search - Basic semantic search",
+            "v1_core": {
+                "search": "POST /v1/search - Basic semantic search",
+                "categories": "GET /v1/categories - List trend categories"
+            },
+            "v1_advanced_search": {
+                "synthesized": "POST /v1/search/synthesized - Cross-report synthesis with meta-trends",
+                "structured": "POST /v1/search/structured - Formatted strategic response",
+                "advanced": "POST /v1/search/advanced - Multi-dimensional, scenario, and trend stacking queries"
+            },
+            "v1_utilities": {
+                "cache_stats": "GET /v1/cache/stats - Query cache performance",
+                "cache_clear": "POST /v1/cache/clear - Clear cache (auth required)",
+                "llm_stats": "GET /v1/llm/stats - LLM usage and costs"
+            },
+            "operational": {
                 "health": "GET /health - System health check with resilience monitoring",
                 "metrics": "GET /metrics - Prometheus metrics endpoint"
-            },
-            "advanced_search": {
-                "synthesized": "POST /search/synthesized - Cross-report synthesis with meta-trends",
-                "structured": "POST /search/structured - Formatted strategic response",
-                "advanced": "POST /search/advanced - Multi-dimensional, scenario, and trend stacking queries"
-            },
-            "utilities": {
-                "categories": "GET /categories - List trend categories",
-                "cache_stats": "GET /cache/stats - Query cache performance",
-                "cache_clear": "POST /cache/clear - Clear cache (auth required)",
-                "llm_stats": "GET /llm/stats - LLM usage and costs"
             },
             "documentation": {
                 "swagger": "/docs - Interactive API documentation",
                 "openapi": "/openapi.json - OpenAPI specification"
             }
         },
+        "backward_compatibility": {
+            "note": "Unversioned endpoints redirect to /v1/",
+            "examples": [
+                "/search → /v1/search",
+                "/categories → /v1/categories"
+            ]
+        },
         "features": [
-            "Semantic search across 51+ trend reports",
-            "Cross-report synthesis & meta-trend identification",
-            "Structured strategic responses for presentations",
-            "Multi-dimensional query support",
-            "Query caching for performance",
-            "LLM-powered analysis (Claude/GPT)",
-            "Automated backups with S3 support",
-            "Cost tracking & budget limits",
-            "Circuit breakers for fault tolerance",
-            "Prometheus metrics & monitoring",
-            "Request timeouts & retry logic"
+            "✅ Semantic search across 51+ trend reports",
+            "✅ Cross-report synthesis & meta-trend identification",
+            "✅ Structured strategic responses for presentations",
+            "✅ Multi-dimensional query support",
+            "✅ Query caching for performance",
+            "✅ LLM-powered analysis (Claude/GPT)",
+            "✅ Circuit breakers & fault tolerance",
+            "✅ Prometheus metrics & monitoring",
+            "✅ API versioning for safe evolution"
         ],
-        "authentication": "Bearer token required (see docs)"
+        "authentication": "Bearer token required (Authorization: Bearer <token>)",
+        "docs_url": "/docs"
     }
+
+
+# ============================================================================
+# Include v1 Router
+# ============================================================================
+app.include_router(v1_router)
+
+
+# ============================================================================
+# Backward Compatibility Redirects
+# ============================================================================
+@app.post("/search")
+async def search_redirect():
+    """Redirect to versioned endpoint"""
+    return RedirectResponse(url="/v1/search", status_code=307)
+
+@app.post("/search/synthesized")
+async def search_synthesized_redirect():
+    """Redirect to versioned endpoint"""
+    return RedirectResponse(url="/v1/search/synthesized", status_code=307)
+
+@app.post("/search/structured")
+async def search_structured_redirect():
+    """Redirect to versioned endpoint"""
+    return RedirectResponse(url="/v1/search/structured", status_code=307)
+
+@app.post("/search/advanced")
+async def search_advanced_redirect():
+    """Redirect to versioned endpoint"""
+    return RedirectResponse(url="/v1/search/advanced", status_code=307)
+
+@app.get("/categories")
+async def categories_redirect():
+    """Redirect to versioned endpoint"""
+    return RedirectResponse(url="/v1/categories", status_code=307)
 
 
 if __name__ == "__main__":

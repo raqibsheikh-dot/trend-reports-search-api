@@ -42,8 +42,8 @@ class StructuredResponse(BaseModel):
 
     relevant_trends: List[str] = Field(
         description="3-5 most applicable trends identified",
-        min_items=1,
-        max_items=5
+        min_length=1,
+        max_length=5
     )
 
     context: str = Field(

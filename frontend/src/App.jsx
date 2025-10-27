@@ -44,7 +44,7 @@ function App() {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch(`${API_URL}/categories`)
+      const response = await fetch(`${API_URL}/v1/categories`)
       if (response.ok) {
         const data = await response.json()
         setCategories(data.categories || [])
@@ -89,7 +89,8 @@ function App() {
     setResults([])
 
     try {
-      let endpoint = '/search'
+      // Use v1 API endpoints
+      let endpoint = '/v1/search'
       let body = {
         query: query.trim(),
         top_k: topK
@@ -102,11 +103,11 @@ function App() {
 
       // Determine endpoint and body based on search mode
       if (searchMode === 'synthesis') {
-        endpoint = '/search/synthesized'
+        endpoint = '/v1/search/synthesized'
       } else if (searchMode === 'structured') {
-        endpoint = '/search/structured'
+        endpoint = '/v1/search/structured'
       } else if (searchMode === 'advanced') {
-        endpoint = '/search/advanced'
+        endpoint = '/v1/search/advanced'
         body = {
           query: query.trim(),
           query_type: queryType,

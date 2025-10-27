@@ -3,8 +3,26 @@
 
 set -e
 
-API_KEY="s1RVpbfkU6NhaCOvw4v_PX7vmoFb9O3YOOBIKXbd-lk"
+# SECURITY: API key must be provided via environment variable
+# Usage: API_KEY=your_key_here ./test_commands.sh [base_url]
+# Or: export API_KEY=your_key_here && ./test_commands.sh
+API_KEY="${API_KEY:-}"
 BASE_URL="${1:-http://localhost:8000}"
+
+# Validate API key is provided
+if [ -z "$API_KEY" ]; then
+  echo "❌ ERROR: API_KEY environment variable is required"
+  echo ""
+  echo "Usage:"
+  echo "  API_KEY=your_key_here ./test_commands.sh [base_url]"
+  echo ""
+  echo "Or set it first:"
+  echo "  export API_KEY=your_key_here"
+  echo "  ./test_commands.sh [base_url]"
+  echo ""
+  echo "Get your API key from backend/.env file"
+  exit 1
+fi
 
 echo "============================================================"
 echo "Testing Trend Reports API"
