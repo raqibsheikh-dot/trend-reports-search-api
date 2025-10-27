@@ -81,6 +81,16 @@ services:
       - key: LRU_CACHE_SIZE
         value: "256"
 
+      # === P1 Performance Optimizations ===
+      - key: REDIS_MAX_CONNECTIONS
+        value: "10"
+
+      - key: LLM_MAX_CONNECTIONS
+        value: "10"
+
+      - key: LLM_MAX_KEEPALIVE
+        value: "5"
+
       # === Advanced Features ===
       - key: ENABLE_CATEGORIZATION
         value: "true"
