@@ -43,6 +43,8 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code from backend directory
 COPY --chown=appuser:appuser backend/*.py .
+COPY --chown=appuser:appuser backend/routers ./routers
+COPY --chown=appuser:appuser backend/services ./services
 
 # Create app directory and set permissions
 # Note: Render will mount disk at /var/data automatically
