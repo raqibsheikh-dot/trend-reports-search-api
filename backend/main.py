@@ -177,7 +177,7 @@ async def startup_event():
     async def check_chromadb():
         """Check if ChromaDB is accessible"""
         collection = get_collection()
-        count = collection.count()
+        count = await collection.count()  # FIXED: Added await
         return {"status": "healthy", "document_count": count}
 
     async def check_cache():
